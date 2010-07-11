@@ -1,18 +1,19 @@
 #!/usr/bin/env tclsh8.5
 package require Tcl 8.5
 
-set rfkill(1,type) "bluetooth"
-set rfkill(2,type) "wwan"
-set rfkill(3,type) "wlan"
-set rfkill(1,name) "tpacpi_bluetooth_sw"
-set rfkill(2,name) "tpacpi_wwan_sw"
-set rfkill(3,name) "phy0"
-set rfkill(bluetooth,state) soft_blocked
-set rfkill(wwan,state) keep
-set rfkill(wlan,state) soft_blocked
-set rfkill(base) "/sys/class/rfkill"
+namespace eval tprfkill {
+	array set rfkill {
+		base		"/sys/class/rfkill"
+		1,type		"bluetooth"
+		2,type		"wwan"
+		3,type		"wlan"
+		bluetooth,state	soft_blocked
+		wwan,state	keep
+		wlan,state	soft_blocked
+	}
+}
 
-proc type {subcmd rfdir} {
+proc tprfkill::type {subcmd rfdir} {
 	variable rfkill
 	if {$subcmd ne "read"} {
 		return -code error "unknown subcmd, must be read"
@@ -34,7 +35,7 @@ proc type {subcmd rfdir} {
 	return -code error "unsupported type"
 }
 
-proc state {subcmd rfdir args} {
+proc tprfkill::state {subcmd rfdir args} {
 	# read state
 	set fn [file join $rfdir state]
 	if {![file readable $fn]} {
@@ -79,7 +80,7 @@ proc state {subcmd rfdir args} {
 	}
 }
 
-proc Main {args} {
+proc tprfkill::Main {args} {
 	variable rfkill
 	foreach d [glob -dir $rfkill(base) -- rfkill*] {
 		if {[catch {type read $d} type]} {
@@ -103,4 +104,4 @@ proc Main {args} {
 	}
 }
 
-Main {*}$::argv
+tprfkill::Main {*}$::argv
