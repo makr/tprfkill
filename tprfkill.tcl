@@ -1,16 +1,45 @@
 #!/usr/bin/env tclsh8.5
+# --------------------------------------------------------------------------
+#
+# Copyright © 2010 Matthias Kraft <M.Kraft@gmx.com>.
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
+# --------------------------------------------------------------------------
+
 package require Tcl 8.5
 
 namespace eval tprfkill {
-	array set rfkill {
-		base		"/sys/class/rfkill"
-		1,type		"bluetooth"
-		2,type		"wwan"
-		3,type		"wlan"
+	set base "/sys/class/rfkill"
+	set store(global) "/etc/tprfkillrc"
+	set store(local) "~/.tprfkillrc"
+	array set defaults {
 		bluetooth,state	soft_blocked
 		wwan,state	keep
-		wlan,state	soft_blocked
+		wlan,state	keep
 	}
+	array set state2num {
+		"soft_blocked"	0
+		"unblocked"	1
+		"hard_blocked"	2
+	}
+	array set num2state {
+		0	"soft_blocked"
+		1	"unblocked"
+		2	"hard_blocked"
+	}
+}
+
+proc tprfkill::GetLine {rfdir kind} {
+	set fn [file join $rfdir $kind]
+	if {![file readable $fn]} {
+		return -code error "rfkill $kind is not readable"
+	}
+	set fh [open $fn r]
+	set ln [string trim [chan gets $fh]]
+	chan close $fh
+	return $ln
 }
 
 proc tprfkill::type {subcmd rfdir} {
@@ -19,56 +48,36 @@ proc tprfkill::type {subcmd rfdir} {
 		return -code error "unknown subcmd, must be read"
 	}
 	# read type
-	set fn [file join $rfdir type]
-	if {![file readable $fn]} {
-		return -code error "type is not readable"
-	}
-	set fh [open $fn r]
-	set type [string trim [chan gets $fh]]
-	chan close $fh
-	# verify type
-	foreach t [array names rfkill *,type] {
-		if {$type eq $rfkill($t)} {
-			return $type
-		}
-	}
-	return -code error "unsupported type"
+	return [GetLine $rfdir "type"]
 }
 
 proc tprfkill::state {subcmd rfdir args} {
+	variable num2state
+	variable state2num
 	# read state
-	set fn [file join $rfdir state]
-	if {![file readable $fn]} {
-		return -code error "state is not readable"
+	set st [GetLine $rfdir "state"]
+	if {![info exists num2state($st)]} {
+		return -code error "unsupported state"
 	}
-	set fh [open $fn r]
-	set st [string trim [chan gets $fh]]
-	chan close $fh
-	switch -- $st {
-		0 {set state "soft_blocked"}
-		1 {set state "unblocked"}
-		2 {set state "hard_blocked"}
-		default {return -code error "unsupported state"}
-	}
+	set state $num2state($st)
 	if {$subcmd eq "read"} {
 		return $state
 	}
 	if {$subcmd eq "set"} {
+		lassign $args newstate
+		if {![string is integer -strict $newstate]} {
+			if {![info exists state2num($newstate)]} {
+				return -code error "unsupported state"
+			}
+			set newstate $state2num($newstate)
+		} elseif {![info exists num2state($newstate)]} {
+			return -code error "unsupported state"
+		}
+		set fn [file join $rfdir state]
 		if {![file writable $fn]} {
 			return -code error "state is not writable"
 		}
-		lassign $args newstate
-		if {![string is integer -strict $newstate]} {
-			switch -- $newstate {
-				"soft_blocked" {set newstate 0}
-				"unblocked" {set newstate 1}
-				"hard_blocked" {set newstate 2}
-				default {return -code error "unsupported state"}
-			}
-		}
-		if {$newstate < 0 || $newstate > 2} {
-			return -code error "unsupported state"
-		} elseif {$st == 2} {
+		if {$st == 2} {
 			return -code error "software cannot override a hard_block"
 		} elseif {$newstate == 2} {
 			return -code error "software cannot set a hard_block"
@@ -81,8 +90,9 @@ proc tprfkill::state {subcmd rfdir args} {
 }
 
 proc tprfkill::Main {args} {
-	variable rfkill
-	foreach d [glob -dir $rfkill(base) -- rfkill*] {
+	variable base
+	variable defaults
+	foreach d [glob -dir $base -- rfkill*] {
 		if {[catch {type read $d} type]} {
 			puts stderr "unsupported rfkill device at $d: $type"
 			continue
@@ -91,16 +101,16 @@ proc tprfkill::Main {args} {
 			puts stderr "cannot read state of $type device: $state"
 			continue
 		}
-		if {($rfkill($type,state) eq "keep") ||
-			($rfkill($type,state) eq $state)} {
+		if {($defaults($type,state) eq "keep") ||
+			($defaults($type,state) eq $state)} {
 			puts "$type at [file tail $d] is $state"
 			continue
 		}
-		if {[catch {state set $d $rfkill($type,state)} state]} {
+		if {[catch {state set $d $defaults($type,state)} state]} {
 			puts stderr "cannot set state of $type device: $state"
 			continue
 		}
-		puts "$type at [file tail $d] was $state, now $rfkill($type,state)"
+		puts "$type at [file tail $d] was $state, now $defaults($type,state)"
 	}
 }
 
