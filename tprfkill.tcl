@@ -14,6 +14,7 @@ namespace eval tprfkill {
 	set base "/sys/class/rfkill"
 	set store(global) "/etc/tprfkillrc"
 	set store(local) "~/.tprfkillrc"
+	set store(reload) "/var/lib/tprfkill/states"
 	array set defaults {
 		bluetooth,state	soft_blocked
 		wwan,state	keep
@@ -49,6 +50,15 @@ proc tprfkill::type {subcmd rfdir} {
 	}
 	# read type
 	return [GetLine $rfdir "type"]
+}
+
+proc tprfkill::name {subcmd rfdir} {
+	variable rfkill
+	if {$subcmd ne "read"} {
+		return -code error "unknown subcmd, must be read"
+	}
+	# read type
+	return [GetLine $rfdir "name"]
 }
 
 proc tprfkill::state {subcmd rfdir args} {
@@ -89,29 +99,128 @@ proc tprfkill::state {subcmd rfdir args} {
 	}
 }
 
-proc tprfkill::Main {args} {
+proc tprfkill::read {} {
 	variable base
-	variable defaults
-	foreach d [glob -dir $base -- rfkill*] {
-		if {[catch {type read $d} type]} {
-			puts stderr "unsupported rfkill device at $d: $type"
+	foreach d [glob -dir $base -tails -- rfkill*] {
+		if {[catch {type read "$base/$d"} type]} {
+			puts stderr "cannot determine type of $d: $type"
 			continue
 		}
-		if {[catch {state read $d} state]} {
-			puts stderr "cannot read state of $type device: $state"
+		if {[catch {name read "$base/$d"} name]} {
+			puts stderr "cannot read name of $d: $name"
 			continue
 		}
-		if {($defaults($type,state) eq "keep") ||
-			($defaults($type,state) eq $state)} {
-			puts "$type at [file tail $d] is $state"
+		if {[catch {state read "$base/$d"} state]} {
+			puts stderr "cannot read state of $d: $state"
 			continue
 		}
-		if {[catch {state set $d $defaults($type,state)} state]} {
-			puts stderr "cannot set state of $type device: $state"
-			continue
-		}
-		puts "$type at [file tail $d] was $state, now $defaults($type,state)"
+		puts "$name ($type) at $d is $state"
 	}
+}
+
+proc tprfkill::reset {} {
+	return -code error unimplemented
+	if {[catch {state set $d $defaults($type,state)} state]} {
+		puts stderr "cannot set state of $type device: $state"
+		continue
+	}
+	puts "$type at [file tail $d] was $state, now $defaults($type,state)"
+
+}
+
+proc tprfkill::Main {args} {
+	variable config
+
+	LoadDefaults
+	Config {*}$args
+
+	if {[catch $config(action) msg]} {
+		puts stderr "could not $config(action) rfkill states: $msg"
+		exit 1
+	}
+}
+
+proc tprfkill::LoadDefaults {} {
+	variable store
+	foreach f [list $store(global) $store(local)] {
+		if {[file readable $f] &&
+		    [catch {LoadFile $f} msg]} {
+			puts stderr "cannot load rfkill settings from $f: $msg"
+		}
+	}
+}
+
+proc tprfkill::LoadFile {file} {
+	variable defaults
+	set fh [open $file r]
+	chan configure $fh -encoding utf-8
+	while {![chan eof $fh]} {
+		if {[chan gets $fh line] > 0} {
+			# look if there is a comment character in the line
+			set cstart [string first "#" $line]
+			if {$cstart >= 0} {
+				# remove comment
+				set line [string range $line 0 [expr {$cstart - 1}]]
+			}
+			# remove surrounding whitespace
+			set line [string trim $line]
+			# expect a property style line
+			if {[regexp -- {^(\w+)\s*=\s*(\w+)} $line -> k v]} {
+				set newdef($k) $v
+			}
+		}
+	}
+	chan close $fh
+	if {[info exists newdef]} {
+		# file has been read successfully, override defaults array
+		array set defaults [array get newdef]
+	}
+}
+
+proc tprfkill::Config {args} {
+	variable config
+	set subcmd [lindex $args 0]
+	set args [lrange $args 1 end]
+	if {$subcmd eq "read"} {
+		set config(action) "read"
+	} elseif {$subcmd eq "reset"} {
+		set config(action) "reset"
+	} elseif {$subcmd eq "save"} {
+		set config(action) "save"
+	} elseif {$subcmd eq "all"} {
+		lassign $args newstate
+		if {![string is boolean -strict $newstate]} {
+			Usage
+		}
+		if {$newstate} {
+			set newstate "unblocked"
+		} else {
+			set newstate "soft_blocked"
+		}
+		foreach k [array names defaults] {
+			set defaults($k) $newstate
+		}
+		set config(action) reset
+	} elseif {$subcmd eq "dump"} {
+		set config(action) "dump"
+	} elseif {$subcmd eq "restore"} {
+		set config(action) "restore"
+	} else {
+		Usage
+	}
+}
+
+proc tprfkill::Usage {} {
+	variable store
+	puts stderr "$::argv0 subcmd \[options\]\nsubcmds:"
+	puts stderr " read    - read rfkill states and print them"
+	puts stderr " save    - save rfkill states to $store(local)"
+	puts stderr " reset   - reset rfkill states to program defaults"
+	puts stderr " all off - switch all rfkill devices off"
+	puts stderr " all on  - switch all rfkill devices on (if possible)"
+	puts stderr " dump    - dump rfkill states to persistent store"
+	puts stderr " restore - restore rfkill states from persistent store"
+	exit 1
 }
 
 tprfkill::Main {*}$::argv

@@ -1,0 +1,21 @@
+-- tprfkill
+
+Script to read and restore bluetooth, wlan, and wwan rfkill settings when
+running Linux on a ThinkPad.
+
+Copyright © 2010 Matthias Kraft <M.Kraft@gmx.com>
+
+See the file "license.terms" for information on usage and redistribution.
+
+
+I am currently writing this, because my ThinkPad X200s always starts into Linux
+with all rf devices switched on. This script should give me the possibility to
+dump the state of the devices at shutdown and when booting up reload the states
+again. Thus only having, e.g. wlan switched on. Eventually there will also be a
+small GUI for a quick overview and easy switching of the states. If possible I
+will even try to bind the GUI to FN+F5 then.
+
+Currently, however, only reading of the states is implemented.
+
+Usage: ./tprfkill.tcl read
+
