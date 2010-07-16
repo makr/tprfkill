@@ -7,6 +7,8 @@
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
 # --------------------------------------------------------------------------
+# TODO: implement subcmds: dump, restore, then the rest
+# TODO: with restore, check if rfkill is available, try to modprobe if not
 
 package require Tcl 8.5
 
@@ -16,9 +18,9 @@ namespace eval tprfkill {
 	set store(local) "~/.tprfkillrc"
 	set store(reload) "/var/lib/tprfkill/states"
 	array set defaults {
-		bluetooth,state	soft_blocked
-		wwan,state	keep
-		wlan,state	keep
+		bluetooth	soft_blocked
+		wwan		keep
+		wlan		keep
 	}
 	array set state2num {
 		"soft_blocked"	0
@@ -32,6 +34,7 @@ namespace eval tprfkill {
 	}
 }
 
+# read the first line from $rfdir/$kind
 proc tprfkill::GetLine {rfdir kind} {
 	set fn [file join $rfdir $kind]
 	if {![file readable $fn]} {
@@ -43,29 +46,35 @@ proc tprfkill::GetLine {rfdir kind} {
 	return $ln
 }
 
+# handle rfkill device type
 proc tprfkill::type {subcmd rfdir} {
+	variable base
 	variable rfkill
 	if {$subcmd ne "read"} {
 		return -code error "unknown subcmd, must be read"
 	}
 	# read type
-	return [GetLine $rfdir "type"]
+	return [GetLine "$base/$rfdir" "type"]
 }
 
+# handle rfkill device name
 proc tprfkill::name {subcmd rfdir} {
+	variable base
 	variable rfkill
 	if {$subcmd ne "read"} {
 		return -code error "unknown subcmd, must be read"
 	}
 	# read type
-	return [GetLine $rfdir "name"]
+	return [GetLine "$base/$rfdir" "name"]
 }
 
+# handle rfkill device state
 proc tprfkill::state {subcmd rfdir args} {
+	variable base
 	variable num2state
 	variable state2num
 	# read state
-	set st [GetLine $rfdir "state"]
+	set st [GetLine "$base/$rfdir" "state"]
 	if {![info exists num2state($st)]} {
 		return -code error "unsupported state"
 	}
@@ -83,7 +92,7 @@ proc tprfkill::state {subcmd rfdir args} {
 		} elseif {![info exists num2state($newstate)]} {
 			return -code error "unsupported state"
 		}
-		set fn [file join $rfdir state]
+		set fn [file join $base $rfdir state]
 		if {![file writable $fn]} {
 			return -code error "state is not writable"
 		}
@@ -99,47 +108,119 @@ proc tprfkill::state {subcmd rfdir args} {
 	}
 }
 
+# read and print all states
 proc tprfkill::read {} {
+	foreach {name type rfkill state} [Read 0] {
+		puts "$name ($type) at $rfkill is $state"
+	}
+}
+
+# read current states and return result list with 4 entries per device:
+# name type file state
+proc tprfkill::Read {fail} {
 	variable base
+	set rc [expr {$fail ? "error" : "continue"}]
+	set result {}
 	foreach d [glob -dir $base -tails -- rfkill*] {
-		if {[catch {type read "$base/$d"} type]} {
-			puts stderr "cannot determine type of $d: $type"
-			continue
+		if {[catch {type read $d} type]} {
+			 Error $rc "cannot determine type of $d: $type"
 		}
-		if {[catch {name read "$base/$d"} name]} {
-			puts stderr "cannot read name of $d: $name"
-			continue
+		if {[catch {name read $d} name]} {
+			Error $rc "cannot read name of $d: $name"
 		}
-		if {[catch {state read "$base/$d"} state]} {
-			puts stderr "cannot read state of $d: $state"
-			continue
+		if {[catch {state read $d} state]} {
+			Error $rc "cannot read state of $d: $state"
 		}
-		puts "$name ($type) at $d is $state"
+		lappend result $name $type $d $state
+	}
+	return $result
+}
+
+# either print error and return with code rc, or if rc is "error", flag error
+# and set error msg
+proc tprfkill::Error {rc msg} {
+	if {$rc ne "error"} {
+		puts stderr $msg
+		return -code $rc
+	} else {
+		return -code error $msg
 	}
 }
 
+# reset all states to the default values
 proc tprfkill::reset {} {
-	return -code error unimplemented
-	if {[catch {state set $d $defaults($type,state)} state]} {
-		puts stderr "cannot set state of $type device: $state"
-		continue
-	}
-	puts "$type at [file tail $d] was $state, now $defaults($type,state)"
+	variable defaults
 
+	foreach {n t f s} [Read 1] {
+		if {[info exists defaults($n)]} {
+			# ok we have a setting by the device's name
+			set k $n
+		} elseif {[info exists defaults($t)]} {
+			# ok we have a setting for a type like this
+			set k $t
+		} else {
+			# nothing found, skip
+			continue
+		}
+		if {($defaults($k) eq "keep") || ($defaults($k) eq $s)} {
+			# we should either not touch this device, or the state
+			# is already the requested one
+			continue
+		}
+		if {[catch {state set $f $defaults($k)} state]} {
+			puts stderr "cannot set state of device $f ($k): $state"
+		} else {
+			puts "$k at $f is now $defaults($k) was $s"
+		}
+	}
 }
 
+# save current states to local configuration
+proc tprfkill::save {} {
+	variable store
+	# get the current values
+	set currentStates [Read 1]
+	# backup existing settings
+	if {[file exists $store(local)]} {
+		file rename -force -- $store(local) ${store(local)}~
+	}
+	# store the current values
+	set fh [open $store(local) w]
+	chan configure $fh -encoding utf-8
+	chan puts $fh "# tprfkill settings - saved at [Timestamp {}]"
+	foreach {n t f s} $currentStates {
+		chan puts $fh "# ${f}: ${t}"
+		chan puts $fh "${n} = ${s}"
+	}
+	chan close $fh
+}
+
+# format a timestamp, results in e.g. "2010-07-16 22:19:49 CEST"
+proc tprfkill::Timestamp {seconds} {
+	if {$seconds eq ""} {
+		set seconds [clock seconds]
+	}
+	clock format $seconds -format "%Y-%m-%d %T %Z"
+}
+
+# load configuration and start requested operation
+# note: Main returns exit codes: 0 => ok, 1 => failure
 proc tprfkill::Main {args} {
 	variable config
 
 	LoadDefaults
-	Config {*}$args
+	if {![Config {*}$args]} {
+		return 1
+	}
 
 	if {[catch $config(action) msg]} {
 		puts stderr "could not $config(action) rfkill states: $msg"
-		exit 1
+		return 1
 	}
+	return 0
 }
 
+# if available load global settings, then local, last one wins
 proc tprfkill::LoadDefaults {} {
 	variable store
 	foreach f [list $store(global) $store(local)] {
@@ -150,6 +231,7 @@ proc tprfkill::LoadDefaults {} {
 	}
 }
 
+# load requested configuration and overwrite program defaults
 proc tprfkill::LoadFile {file} {
 	variable defaults
 	set fh [open $file r]
@@ -177,6 +259,7 @@ proc tprfkill::LoadFile {file} {
 	}
 }
 
+# configure operation as requested on command line
 proc tprfkill::Config {args} {
 	variable config
 	set subcmd [lindex $args 0]
@@ -208,8 +291,10 @@ proc tprfkill::Config {args} {
 	} else {
 		Usage
 	}
+	return 1
 }
 
+# print a short usage information and exit
 proc tprfkill::Usage {} {
 	variable store
 	puts stderr "$::argv0 subcmd \[options\]\nsubcmds:"
@@ -220,7 +305,10 @@ proc tprfkill::Usage {} {
 	puts stderr " all on  - switch all rfkill devices on (if possible)"
 	puts stderr " dump    - dump rfkill states to persistent store"
 	puts stderr " restore - restore rfkill states from persistent store"
-	exit 1
+	return -code return 0
 }
 
-tprfkill::Main {*}$::argv
+if {![info exists ::tcl_interactive] || !$::tcl_interactive} {
+	# start program automatically only if not sourced in a tclsh
+	exit [tprfkill::Main {*}$::argv]
+}
