@@ -23,7 +23,7 @@ Usage: ./tprfkill.tcl read
 
 Usage: ./tprfkill.tcl save
  Will save the current rfkill status of the devices in the local settings at
- "~/tprfkillrc". This can be used as template to edit for use by "reset".
+ "~/.tprfkillrc". This can be used as template to edit for use by "reset".
  Possible values are
   soft_blocked => device should be off
   unblocked => device should be on
@@ -32,3 +32,10 @@ Usage: ./tprfkill.tcl save
 Usage: ./tprfkill.tcl reset
  Reset the state of all devices from the defaults, e.g. as loaded from the local
  settings.
+
+Usage: ./tprfkill.tcl dump
+ Dump the current status of the rfkill devices in a simple machine readable
+ file.
+
+Usage: ./tprfkill.tcl restore
+ Restore the previously dumped status of all rfkill devices.

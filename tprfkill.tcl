@@ -7,8 +7,8 @@
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
 # --------------------------------------------------------------------------
-# TODO: implement subcmds: dump, restore, then the rest
 # TODO: with restore, check if rfkill is available, try to modprobe if not
+# TODO: SYSV script
 
 package require Tcl 8.5
 
