@@ -195,6 +195,41 @@ proc tprfkill::save {} {
 	chan close $fh
 }
 
+# dump current status of the rfkill devices to an independent file
+proc tprfkill::dump {} {
+	variable store
+	set entries {}
+	set dir [file dirname $store(reload)]
+	if {![file isdirectory $dir]} {
+		file mkdir $dir
+	}
+	set fh [open $store(reload) w]
+	chan configure $fh -encoding utf-8
+	foreach {n t f s} [Read 0] {
+		lappend entries [join [list $n $s] "="]
+	}
+	chan puts -nonewline $fh [join $entries ";"]
+	chan close $fh
+}
+
+# restore the previously dumped status of the rfkill devices
+proc tprfkill::restore {} {
+	variable store
+	variable defaults
+	if {![file exists $store(reload)]} {
+		return -code error "cannot find previously dumped settings"
+	}
+	set fh [open $store(reload) r]
+	chan configure $fh -encoding utf-8
+	set dump [chan read $fh]
+	chan close $fh
+	array unset defaults
+	foreach entry [split $dump ";"] {
+		array set defaults [split $entry "="]
+	}
+	reset
+}
+
 # format a timestamp, results in e.g. "2010-07-16 22:19:49 CEST"
 proc tprfkill::Timestamp {seconds} {
 	if {$seconds eq ""} {
