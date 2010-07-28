@@ -7,7 +7,6 @@
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
 # --------------------------------------------------------------------------
-# TODO: with restore, check if rfkill is available, try to modprobe if not
 # TODO: SYSV script
 
 package require Tcl 8.5
@@ -227,6 +226,7 @@ proc tprfkill::restore {} {
 	foreach entry [split $dump ";"] {
 		array set defaults [split $entry "="]
 	}
+	LoadRfkillSupport
 	reset
 }
 
@@ -236,6 +236,35 @@ proc tprfkill::Timestamp {seconds} {
 		set seconds [clock seconds]
 	}
 	clock format $seconds -format "%Y-%m-%d %T %Z"
+}
+
+# check if kernel has rfkill support loaded
+proc tprfkill::IsRfkillLoaded {} {
+	set modules "/proc/modules"
+	if {![file readable $modules]} {
+		puts stderr "module list in procfs is not readable"
+		return 0
+	}
+	set rfkillFound 0
+	set fh [open $modules r]
+	foreach l [chan gets $fh] {
+		if {[string match "rfkill*" $l]} {
+			set rfkillFound 1
+			break
+		}
+		if {[chan eof $fh]} {
+			break
+		}
+	}
+	chan close $fh
+	return $rfkillFound
+}
+
+# simple attempt to load rfkill module, if found necessary
+proc tprfkill::LoadRfkillSupport {} {
+	if {![IsRfkillLoaded]} {
+		exec -- modprobe rfkill
+	}
 }
 
 # load configuration and start requested operation
