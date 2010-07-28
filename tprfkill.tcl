@@ -7,12 +7,12 @@
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
 # --------------------------------------------------------------------------
-# TODO: SYSV script
 
 package require Tcl 8.5
 
 namespace eval tprfkill {
 	set base "/sys/class/rfkill"
+	set modules "/proc/modules"
 	set store(global) "/etc/tprfkillrc"
 	set store(local) "~/.tprfkillrc"
 	set store(reload) "/var/lib/tprfkill/states"
@@ -240,7 +240,8 @@ proc tprfkill::Timestamp {seconds} {
 
 # check if kernel has rfkill support loaded
 proc tprfkill::IsRfkillLoaded {} {
-	set modules "/proc/modules"
+	variable modules
+
 	if {![file readable $modules]} {
 		puts stderr "module list in procfs is not readable"
 		return 0

@@ -1,0 +1,8 @@
+## Path:	Hardware/RFKill
+## Description:	Tcl Interpreter for tprfkill script
+## Type:	string
+## Default:	"/usr/bin/tclsh"
+#
+# Path to a tclsh executable ofat least version 8.5.
+#
+TPRFKILL_TCLSH="/usr/bin/tclsh"
