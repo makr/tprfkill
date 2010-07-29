@@ -1,9 +1,9 @@
 #!/bin/bash
-# -- rctprfkill
+# -- tprfkill
 #
 # SYS-V init script to dump and restore the states of rfkill devices
 #
-# Copyright © 2010 by Matthias Kraft <M.Kraft@gmx.com>
+# Parts are copyright © 2010 by Matthias Kraft <M.Kraft@gmx.com>
 #
 # It follows the original copyright notice of the template:
 # -----------------------------------------------------------------------------
@@ -65,7 +65,7 @@ test -r $tprfkill_CONFIG || { echo "$tprfkill_CONFIG not existing";
 	if [ "$1" = "stop" ]; then exit 0;
 	else exit 6; fi; }
 
-# Read config	
+# Read config
 . $tprfkill_CONFIG
 
 # Source LSB init functions

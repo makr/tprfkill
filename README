@@ -6,22 +6,57 @@ running Linux on a ThinkPad.
 Copyright © 2010 Matthias Kraft <M.Kraft@gmx.com>
 
 See the file "license.terms" for information on usage and redistribution.
+-----------------------------------------------------------------------------
 
+Intention
+---------
 
-I am currently writing this, because my ThinkPad X200s always starts into Linux
-with all rf devices switched on. This script should give me the possibility to
-dump the state of the devices at shutdown and when booting up reload the states
-again. Thus only having, e.g. wlan switched on. Eventually there will also be a
-small GUI for a quick overview and easy switching of the states. If possible I
-will even try to bind the GUI to FN+F5 then.
+I wrote it, because my ThinkPad X200s always starts into Linux with all rf
+devices (bluetooth, wlan, wwan, etc.) switched on. This script now gives me the
+possibility to dump the state of the devices at shutdown and restore them when
+booting up again. Thus only having, e.g. wwan switched on.
 
-Currently, however, only following functionality is implemented.
+Open Topics
+-----------
 
-Usage: ./tprfkill.tcl read
+Eventually there will also be a small GUI for a quick overview and easy
+switching of the states. If possible I will even try to bind the GUI to FN+F5
+then.
+
+Prerequisites
+-------------
+
+The script is a Tcl script and needs a Tcl interpreter of at least version 8.5.
+To check if one is installed you may use your package manager or check manually,
+e.g. like so:
+$ which tclsh
+/usr/bin/tclsh
+$ echo 'puts [info patchlevel]' | tclsh
+8.5.7
+
+Installation
+------------
+
+To use the main functionality (restoring of the device states after boot up) the
+script has to be installed:
+
+1. become root or use sudo for the following steps
+2. review and execute install.sh in the source directory
+3. run the script once to save the current state locally, e.g. tprfkill.tcl save
+4. edit the settings to match your desired configuration
+5. run the script again to load the settings, e.g. tprfkill.tcl reset
+
+Note: The local settings will not be read by dump and restore. Step 3-5 are only
+meant to setup the currently desired configuration.
+
+Usage
+-----
+
+tprfkill.tcl read
  Prints a line like "name (type) at file is state", e.g.
- "tpacpi_bluetooth_sw (bluetooth) at rfkill1 is soft_blocked".
+ tpacpi_bluetooth_sw (bluetooth) at rfkill1 is soft_blocked
 
-Usage: ./tprfkill.tcl save
+tprfkill.tcl save
  Will save the current rfkill status of the devices in the local settings at
  "~/.tprfkillrc". This can be used as template to edit for use by "reset".
  Possible values are
@@ -29,13 +64,17 @@ Usage: ./tprfkill.tcl save
   unblocked => device should be on
   keep => do not touch this device
 
-Usage: ./tprfkill.tcl reset
+tprfkill.tcl reset
  Reset the state of all devices from the defaults, e.g. as loaded from the local
  settings.
 
-Usage: ./tprfkill.tcl dump
+tprfkill.tcl dump
  Dump the current status of the rfkill devices in a simple machine readable
- file.
+ file. This should only be used by the init-script.
 
-Usage: ./tprfkill.tcl restore
- Restore the previously dumped status of all rfkill devices.
+tprfkill.tcl restore
+ Restore the previously dumped status of the rfkill devices. This should only be
+ used by the init-script.
+
+tprfkill.tcl all on|off
+ Switch all devices on (unblocked) or off (soft_blocked).
