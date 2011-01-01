@@ -373,7 +373,8 @@ proc tprfkill::Usage {} {
 	return -code return 0
 }
 
-if {![info exists ::tcl_interactive] || !$::tcl_interactive} {
+if {(![info exists ::tcl_interactive] || !$::tcl_interactive) &&
+    ([namespace current] eq "::")} {
 	# start program automatically only if not sourced in a tclsh
 	exit [tprfkill::Main {*}$::argv]
 }
